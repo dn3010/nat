@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
-	"flag"
 	"fmt"
 	"net"
 	"time"
@@ -13,9 +12,6 @@ import (
 )
 
 const stunTimeout = 5 * time.Second
-
-var stunserver = flag.String("stunserver", "stun.l.google.com:19302",
-	"STUN server to query for reflexive address")
 
 var lanNets = []*net.IPNet{
 	{net.IPv4(10, 0, 0, 0), net.CIDRMask(8, 32)},
@@ -37,18 +33,12 @@ func (c candidate) Equal(c2 candidate) bool {
 	return c.Addr.IP.Equal(c2.Addr.IP) && c.Addr.Port == c2.Addr.Port
 }
 
-func getReflexive(sock *net.UDPConn) (*net.UDPAddr, error) {
+func getReflexive(sock *net.UDPConn, serverAddr *net.UDPAddr) (*net.UDPAddr, error) {
 	sock.SetDeadline(time.Now().Add(stunTimeout))
 	defer sock.SetDeadline(time.Time{})
 
-	serverAddr, err := net.ResolveUDPAddr("udp", *stunserver)
-	if err != nil {
-
-		return nil, errors.New("Couldn't resolve STUN server")
-	}
-
 	var tid [12]byte
-	if _, err = rand.Read(tid[:]); err != nil {
+	if _, err := rand.Read(tid[:]); err != nil {
 		return nil, err
 	}
 
@@ -128,7 +118,7 @@ skipCandidate:
 	return ret
 }
 
-func GatherCandidates(sock *net.UDPConn, ifaces []string, blacklist []*net.IPNet) ([]candidate, error) {
+func GatherCandidates(sock *net.UDPConn, ifaces []string, blacklist []*net.IPNet, stunserver string) ([]candidate, error) {
 	laddr := sock.LocalAddr().(*net.UDPAddr)
 	ret := []candidate{}
 	switch {
@@ -168,8 +158,14 @@ func GatherCandidates(sock *net.UDPConn, ifaces []string, blacklist []*net.IPNet
 		ret = append(ret, candidate{laddr, 0})
 	}
 
+	serverAddr, err := net.ResolveUDPAddr("udp", stunserver)
+	if err != nil {
+
+		return nil, errors.New("Couldn't resolve STUN server")
+	}
+
 	// Get the reflexive address
-	reflexive, err := getReflexive(sock)
+	reflexive, err := getReflexive(sock, serverAddr)
 	if err == nil {
 		ret = append(ret, candidate{reflexive, 0})
 	}

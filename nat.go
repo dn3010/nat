@@ -39,6 +39,9 @@ type Config struct {
 	// TOS, if >0, sets IP_TOS to this value. Note an error is considered
 	// non-fatal, it is just logged.
 	TOS int
+	// StunServer
+	// The address of the stun server to use eg stun.l.google.com:19302
+	StunServer string
 }
 
 func DefaultConfig() *Config {
@@ -48,10 +51,11 @@ func DefaultConfig() *Config {
 		PeerDeadline: 6 * time.Second,
 		BindAddress:  &net.UDPAddr{},
 		TOS:          -1,
+		StunServer:   "stun.l.google.com:19302",
 	}
 }
 
-func ConnectOpt(xchg ExchangeCandidatesFun, initiator bool, cfg *Config) (net.Conn, error) {
+func ConnectOpt(xchg ExchangeCandidatesFun, initiator bool, cfg *Config) (NatConn, error) {
 	sock, err := net.ListenUDP("udp", cfg.BindAddress)
 	if err != nil {
 		return nil, err
@@ -75,7 +79,7 @@ func ConnectOpt(xchg ExchangeCandidatesFun, initiator bool, cfg *Config) (net.Co
 	return conn, nil
 }
 
-func Connect(xchg ExchangeCandidatesFun, initiator bool) (net.Conn, error) {
+func Connect(xchg ExchangeCandidatesFun, initiator bool) (NatConn, error) {
 	return ConnectOpt(xchg, initiator, DefaultConfig())
 }
 
@@ -93,12 +97,12 @@ type attemptEngine struct {
 	sock      *net.UDPConn
 	initiator bool
 	attempts  []attempt
-	p2pconn   net.Conn
+	p2pconn   NatConn
 	cfg       *Config
 }
 
 func (e *attemptEngine) init() error {
-	candidates, err := GatherCandidates(e.sock, e.cfg.UseInterfaces, e.cfg.BlacklistAddresses)
+	candidates, err := GatherCandidates(e.sock, e.cfg.UseInterfaces, e.cfg.BlacklistAddresses, e.cfg.StunServer)
 	if err != nil {
 		return err
 	}
@@ -247,7 +251,7 @@ func (e *attemptEngine) read() error {
 	return nil
 }
 
-func (e *attemptEngine) run() (net.Conn, error) {
+func (e *attemptEngine) run() (NatConn, error) {
 	if err := e.init(); err != nil {
 		return nil, err
 	}

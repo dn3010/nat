@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+type NatConn interface {
+	net.Conn
+	ReadFrom(b []byte) (n int, addr net.Addr, err error)
+	WriteTo(b []byte, addr net.Addr) (n int, err error)
+}
+
 type Conn struct {
 	conn          *net.UDPConn
 	local, remote net.Addr
@@ -32,8 +38,16 @@ func (c *Conn) Read(b []byte) (int, error) {
 	panic("unreachable")
 }
 
+func (c *Conn) ReadFrom(b []byte) (int, net.Addr, error) {
+	return c.conn.ReadFrom(b)
+}
+
 func (c *Conn) Write(b []byte) (int, error) {
 	return c.conn.WriteTo(b, c.remote)
+}
+
+func (c *Conn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	return c.Write(b)
 }
 
 func (c *Conn) Close() error {
